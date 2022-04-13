@@ -77,6 +77,9 @@ parser.add_argument('-s', '--step',
                     default=1,
                     dest='step', action='store', type=int,
                     help='step used when loading trajectory (i.e., 1 to read every single frame, 2 to read every two frames...)')
+parser.add_argument('--intramolecular',
+                    dest='intramolecular', action='store_true',
+                    help='account for intramolecular interactions in analysis')
 parser.add_argument('--split',
                     default=1,
                     dest='split', action='store', type=int,
@@ -84,11 +87,10 @@ parser.add_argument('--split',
 parser.add_argument('-x', '--xlabel',
                     default='Time (ns)',
                     dest='x_label', action='store',
-                    help='x label')
-parser.add_argument('--runcommand',
-                    default=True,
-                    dest='run_command', action='store',
-                    help='run VMD commands to generate input data, only set to False if the script has already been ran at least once')
+                    help='label on x-axis')
+parser.add_argument('--skipcommand',
+                    dest='skip_command', action='store_true',
+                    help='skip running VMD commands to generate input data, only set if the script has already been ran at least once')
 parser.add_argument('--labelsize',
                     default=20,
                     dest='size', action='store', type=float,
@@ -102,21 +104,34 @@ aa_names = {'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D',
             'MET': 'M', 'PHE': 'F', 'PRO': 'P', 'SER': 'S',
             'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'}
 
+# Thresholds for detection (global variables)
+config.BS_DIST = 7.5  # Determines maximum distance to include binding site residues
+config.AROMATIC_PLANARITY = 5.0  # Determines allowed deviation from planarity in aromatic rings
+config.MIN_DIST = 0.5  # Minimum distance for all distance thresholds
+config.HYDROPH_DIST_MAX = 4.0  # Distance cutoff for detection of hydrophobic contacts
+config.HBOND_DIST_MAX = 3.5  # Max. distance between hydrogen bond donor and acceptor (Hubbard & Haider, 2001)
+config.HBOND_DON_ANGLE_MIN = 100  # Min. angle at the hydrogen bond donor (Hubbard & Haider, 2001) + 10
+config.PISTACK_DIST_MAX = 5.5  # Max. distance for parallel or offset pistacking (McGaughey, 1998)
+config.PISTACK_ANG_DEV = 30  # Max. Deviation from parallel or perpendicular orientation (in degrees)
+config.PISTACK_OFFSET_MAX = 2.0  # Maximum offset of the two rings (corresponds to the radius of benzene + 0.5 A)
+config.PICATION_DIST_MAX = 6.0  # Max. distance between charged atom and aromatic ring center (Gallivan and Dougherty, 1999)
+config.SALTBRIDGE_DIST_MAX = 5.5  # Max. distance between centers of charge for salt bridges (Barlow and Thornton, 1983) + 1.5
+
 
 def get_interactions(resID, site, type):
     """Return residue numbers of residues involved in specified type of interactions"""
     if type == 'hbonds':
         return list(set([get_res_properties(i) for i in site.hbonds_ldon if abs(resID - i.resnr) != 4] + [get_res_properties(i) for i in site.hbonds_pdon if abs(resID - i.resnr) != 4]))
     elif type == 'hydrophobic_contacts':
-        return list(set([get_res_properties(i) for i in site.hydrophobic_contacts if abs(resID - i.resnr) != 4]))
+        return list(set([get_res_properties(i) for i in site.hydrophobic_contacts]))
     elif type == 'water_bridges':
-        return list(set([get_res_properties(i) for i in site.water_bridges if abs(resID - i.resnr) != 4]))
+        return list(set([get_res_properties(i) for i in site.water_bridges]))
     elif type == 'salt_bridges':
-        return list(set([get_res_properties(i) for i in site.saltbridge_lneg if abs(resID - i.resnr) != 4] + [get_res_properties(i) for i in site.saltbridge_pneg if abs(resID - i.resnr) != 4]))
+        return list(set([get_res_properties(i) for i in site.saltbridge_lneg] + [get_res_properties(i) for i in site.saltbridge_pneg]))
     elif type == 'pi_stacking':
-        return list(set([get_res_properties(i) for i in site.pistacking if abs(resID - i.resnr) != 4]))
+        return list(set([get_res_properties(i) for i in site.pistacking]))
     elif type == 'pi_cation':
-        return list(set([get_res_properties(i) for i in site.pication_laro if abs(resID - i.resnr) != 4] + [get_res_properties(i) for i in site.pication_paro if abs(resID - i.resnr) != 4]))
+        return list(set([get_res_properties(i) for i in site.pication_laro] + [get_res_properties(i) for i in site.pication_paro]))
     elif type == 'all':
         return get_interactions(site, 'hbonds') + get_interactions(site, 'hydrophobic_contacts') + get_interactions(site, 'water_bridges') + get_interactions(site, 'salt_bridges') + get_interactions(site, 'pi_stacking') + get_interactions(site, 'pi_cation')
     else:
@@ -137,13 +152,6 @@ def closest(input_list, k):
     return index
 
 
-# Conversion of 3-letter amino acid code to 1-letter code
-aa_names = {'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D',
-            'CYS': 'C', 'GLU': 'E', 'GLN': 'Q', 'GLY': 'G',
-            'HIS': 'H', 'ILE': 'I', 'LEU': 'L', 'LYS': 'K',
-            'MET': 'M', 'PHE': 'F', 'PRO': 'P', 'SER': 'S',
-            'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'}
-
 # Automatically determine input file name if given wildcard as input - will take first result that appears as input
 if arg.psf.split('.')[0] == '*':
     arg.psf = glob.glob('*.' + arg.psf.split('.')[-1])[0]
@@ -151,15 +159,12 @@ if arg.dcd.split('.')[0] == '*':
     arg.dcd = glob.glob('*.' + arg.dcd.split('.')[-1])[0]
 
 # If there are atoms to be excluded, generate VMD commands to do so
-exclude_command = ''
 seg1_exclude = ''
 seg2_exclude = ''
 if arg.seg1_exclude:
-    seg1_exclude = ' and (segname ' + str(arg.seg1) + ' and not (' + str(arg.seg1_exclude) + '))'
-    exclude_command += seg1_exclude
+    seg1_exclude = ' and not (' + str(arg.seg1_exclude) + '))'
 if arg.seg2_exclude:
-    seg2_exclude = ' and (segname ' + str(arg.seg2) + ' and not (' + str(arg.seg2_exclude) + '))'
-    exclude_command += seg2_exclude
+    seg2_exclude = ' and not (' + str(arg.seg2_exclude) + '))'
 
 # Print input information
 print('PSF         :', arg.psf)
@@ -183,7 +188,7 @@ os.makedirs('figures', exist_ok=True)
 # Load simulation trajectory and extract data
 vmd_cmd_file = file_name + '_vmd_cmd.tcl'
 
-if arg.run_command == True:
+if not arg.skip_command:
     with open(vmd_cmd_file, 'w+') as f:
         # Load trajectory files
         f.write('mol new ' + arg.psf + ' type psf first 0 last -1 step 1 filebonds 1 autobonds 1 waitfor all\n')
@@ -197,39 +202,28 @@ if arg.run_command == True:
         f.write('set seg2 ' + str(arg.seg2) + '\n')
 
         # Obtain atoms from segment of interest
-        f.write('set sel [atomselect top "segname $seg1 or segname $seg2' + exclude_command + '"]\n')
+        f.write('set sel [atomselect top "(segname $seg1' + seg1_exclude + ') or (segname $seg2' + seg2_exclude + ')"]\n')
         f.write('animate write pdb ' + interactions_pdb + ' skip 1 sel $sel\n')
 
-        # Loop through each frame to look at residues from seg1 that interact with those from seg2
+        # Initialize files to store data
         f.write('set outputname_seg1 "' + os.path.join('temp_pdb', name + '_interacting_residues_seg1.dat') + '"\n')
-        # as well as residues from seg2 that do not interact with those from seg1
         f.write('set outputname_seg2 "' + os.path.join('temp_pdb', name + '_noninteracting_residues_seg2.dat') + '"\n')
-        # also look at time course of RMSD compared to initial frame
-        f.write('set outputname_rmsd "' + os.path.join('temp_pdb', name + '_rmsd.dat') + '"\n')
 
         f.write('set nf [molinfo top get numframes]\n')
         f.write('set out1 [open ${outputname_seg1} w]\n')
         f.write('set out2 [open ${outputname_seg2} w]\n')
-        f.write('set outrmsd [open ${outputname_rmsd} w]\n')
 
         f.write('for {set f 0} {$f < $nf} {incr f} {\n')
         # Loop through each frame to look at residues from seg1 that interact with those from seg2
-        f.write('set interacting_resid_seg1 [atomselect top "segname $seg1 and name CA and same residue as within 6 of segname $seg2" frame $f]\n')
+        f.write('set interacting_resid_seg1 [atomselect top "(segname $seg1' + seg1_exclude + ') and name CA and same residue as within ' + str(config.BS_DIST) + ' of (segname $seg2' + seg2_exclude + ')" frame $f]\n')
         # as well as residues from seg2 that do not interact with those from seg1
-        f.write('set noninteracting_resid_seg2 [atomselect top "segname $seg2 and name CA and not same residue as within 6 of segname $seg1" frame $f]\n')
-        # also look at time course of RMSD compared to initial frame
-        f.write('set seg1_noh_ref [atomselect top "segname $seg1 and noh' + seg1_exclude + '" frame 0]\n')
-        f.write('set seg1_noh [atomselect top "segname $seg1 and noh' + seg1_exclude + '" frame $f]\n')
-        f.write('set seg2_noh_ref [atomselect top "segname $seg2 and noh' + seg2_exclude + '" frame 0]\n')
-        f.write('set seg2_noh [atomselect top "segname $seg2 and noh' + seg2_exclude + '" frame $f]\n')
+        f.write('set noninteracting_resid_seg2 [atomselect top "(segname $seg2' + seg2_exclude + ') and name CA and not same residue as within ' + str(config.BS_DIST) + ' of (segname $seg1' + seg1_exclude + ')" frame $f]\n')
 
         f.write('puts $out1 "[$interacting_resid_seg1 get resid]"\n')
-        f.write('puts $out2 "[$noninteracting_resid_seg2 get resid]"\n')
-        f.write('puts $outrmsd "$f,[measure rmsd $seg1_noh $seg1_noh_ref],[measure rmsd $seg2_noh $seg2_noh_ref]"}\n')
+        f.write('puts $out2 "[$noninteracting_resid_seg2 get resid]" }\n')
 
         f.write('close $out1\n')
         f.write('close $out2\n')
-        f.write('close $outrmsd\n')
 
         f.write('exit')
 
@@ -282,6 +276,9 @@ if not all(os.path.exists(result) for result in saved_results):
         # Remove residues from seg2 that do not interact with residues from seg1
         for res in noninteracting_resid_seg2[frame_count]:
             frame.drop(frame.loc[(frame['ResNum'] == res) & (frame['Segment'] == arg.seg2)].index, inplace=True)
+        # If simulation is not set to analyze intramolecular interactions, remove all residues from seg1 that do not interact with seg2
+        if not arg.intramolecular:
+            frame.drop(frame.loc[(frame['Atom'] == 'ATOM') & (frame['Segment'] == arg.seg1)].index, inplace=True)
         # Convert "HSD" to "HIS"
         frame.loc[frame['Residue'] == 'HSD', 'Residue'] = 'HIS'
         # Fix chain name
@@ -298,10 +295,6 @@ if not all(os.path.exists(result) for result in saved_results):
                            row['Z'].rjust(8) + row['Occupancy'].rjust(6) + row['TempFactor'].rjust(6) +
                            row['Segment'].rjust(12) for index, row in frame.iterrows()])
         pdb.load_pdb(frame, as_string=True)
-
-        # Weak hbonds
-        config.HBOND_DIST_MAX = 4.1
-        config.HBOND_DON_ANGLE_MIN = 100
         pdb.analyze()
         for key_res, site in pdb.interaction_sets.items():
             # Convert key residue from 3 letter code to 1 letter code
@@ -321,42 +314,42 @@ if not all(os.path.exists(result) for result in saved_results):
             if len(get_interactions(key_resID, site, 'hydrophobic_contacts')) > 0:
                 for partner_res in get_interactions(key_resID, site, 'hydrophobic_contacts'):
                     interaction_pair = key_res + '-' + partner_res
-                    hydrophobic_map.loc[frame_count, interaction_pair] = 2
+                    hydrophobic_map.loc[frame_count, interaction_pair] = 1
                 if 'No such contacts encountered' in hydrophobic_map.columns.values:
                     hydrophobic_map.drop(['No such contacts encountered'], axis=1, inplace=True)
 
             if len(get_interactions(key_resID, site, 'salt_bridges')) > 0:
                 for partner_res in get_interactions(key_resID, site, 'salt_bridges'):
                     interaction_pair = key_res + '-' + partner_res
-                    salt_bridges_map.loc[frame_count, interaction_pair] = 2
+                    salt_bridges_map.loc[frame_count, interaction_pair] = 1
                 if 'No such contacts encountered' in salt_bridges_map.columns.values:
                     salt_bridges_map.drop(['No such contacts encountered'], axis=1, inplace=True)
 
             if len(get_interactions(key_resID, site, 'pi_stacking') + get_interactions(key_resID, site, 'pi_cation')) > 0:
                 for partner_res in get_interactions(key_resID, site, 'pi_stacking') + get_interactions(key_resID, site, 'pi_cation'):
                     interaction_pair = key_res + '-' + partner_res
-                    pication_pi_map.loc[frame_count, interaction_pair] = 2
+                    pication_pi_map.loc[frame_count, interaction_pair] = 1
                 if 'No such contacts encountered' in pication_pi_map.columns.values:
                     pication_pi_map.drop(['No such contacts encountered'], axis=1, inplace=True)
 
-        # Strong hbonds
-        config.HBOND_DIST_MAX = 3.5
-        config.HBOND_DON_ANGLE_MIN = 140
-        pdb.analyze()
-        for key_res, site in pdb.interaction_sets.items():
-            # Convert key residue from 3 letter code to 1 letter code
-            key_res = key_res.replace(key_res.split(':')[0], aa_names.get(key_res.split(':')[0])).split(':')
-            # Get resID. Convert key residue from format "<resname>:<resid>:<chain>" to "<resname><resid>:<chain>"
-            key_resID = int(key_res[-1])
-            key_res = key_res[0] + key_res[-1] + ':' + key_res[1]
-            # Evaluate all interactions involving this key residue
-            if len(get_interactions(key_resID, site, 'hbonds')) > 0:
-                # Record interaction pair to dataframe
-                for partner_res in get_interactions(key_resID, site, 'hbonds'):
-                    interaction_pair = key_res + '-' + partner_res
-                    hbonds_map.loc[frame_count, interaction_pair] = 2
-                if 'No such contacts encountered' in hbonds_map.columns.values:
-                    hbonds_map.drop(['No such contacts encountered'], axis=1, inplace=True)
+        # This section is to account for additional H-bond strength
+        # config.HBOND_DIST_MAX = 3.5
+        # config.HBOND_DON_ANGLE_MIN = 140
+        # pdb.analyze()
+        # for key_res, site in pdb.interaction_sets.items():
+        #     # Convert key residue from 3 letter code to 1 letter code
+        #     key_res = key_res.replace(key_res.split(':')[0], aa_names.get(key_res.split(':')[0])).split(':')
+        #     # Get resID. Convert key residue from format "<resname>:<resid>:<chain>" to "<resname><resid>:<chain>"
+        #     key_resID = int(key_res[-1])
+        #     key_res = key_res[0] + key_res[-1] + ':' + key_res[1]
+        #     # Evaluate all interactions involving this key residue
+        #     if len(get_interactions(key_resID, site, 'hbonds')) > 0:
+        #         # Record interaction pair to dataframe
+        #         for partner_res in get_interactions(key_resID, site, 'hbonds'):
+        #             interaction_pair = key_res + '-' + partner_res
+        #             hbonds_map.loc[frame_count, interaction_pair] = 2
+        #         if 'No such contacts encountered' in hbonds_map.columns.values:
+        #             hbonds_map.drop(['No such contacts encountered'], axis=1, inplace=True)
 
         # If no interactions detected in this frame, give all zeros (np.NaN)
         for interaction_map in [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map]:
@@ -369,8 +362,14 @@ if not all(os.path.exists(result) for result in saved_results):
         # if frame_count % 10 == 0:
         #     break
     print('\r   PROGRESS:     ', frame_count, end=' frames (DONE)\n', flush=True)
+
     # Save results as csv
     for result, interaction_map, interaction_name in zip(saved_results, [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['hbonds', 'hydrophobic', 'salt_bridges', 'pication_pi']):
+        # If simulation is not set to analyze intramolecular interactions, remove all intramolecular interactions
+        if not arg.intramolecular:
+            # Remove every time two of the same seg appears in column name
+            regex_statement = ':' + arg.seg1[-1] + '.*?:' + arg.seg1[-1]
+            interaction_map = interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1)
         interaction_map.to_csv(result)
         print('Saved', interaction_name, 'to', result, 'at frame', frame_count)
         # print(interaction_map)
@@ -405,10 +404,10 @@ time = hbonds_map.T.columns.values
 sns.set_context('talk')
 title_size = arg.size
 label_size = arg.size
-fig1, axes1 = plt.subplots(2, 1, figsize=(19, 10), num='hbonds', gridspec_kw={'height_ratios': [len(hbonds_map.columns.values) // 2, 2], 'hspace': 0.04})  # rows, columns
-fig2, axes2 = plt.subplots(2, 1, figsize=(19, 10), num='hydrophobic', gridspec_kw={'height_ratios': [len(hydrophobic_map.columns.values) // 2, 2], 'hspace': 0.04})  # rows, columns
-fig3, axes3 = plt.subplots(2, 1, figsize=(19, 10), num='salt_bridges', gridspec_kw={'height_ratios': [len(salt_bridges_map.columns.values) // 2, 2], 'hspace': 0.04})  # rows, columns
-fig4, axes4 = plt.subplots(2, 1, figsize=(19, 10), num='pication_pi', gridspec_kw={'height_ratios': [len(pication_pi_map.columns.values), 2], 'hspace': 0.04})  # rows, columns
+fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.2), num='hbonds')  # rows, columns
+fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.2), num='hydrophobic')  # rows, columns
+fig3, axes3 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
+fig4, axes4 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
 
 # Plot interactions as heatmap
 print('>> Plotting time series of interactions as heatmaps...')
@@ -418,52 +417,52 @@ for ax, interaction_map, interaction_name in zip([axes1, axes2, axes3, axes4], [
         continue
     # Sort column names by index of key residue
     interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
+    # If simulation is not set to analyze intramolecular interactions, remove all intramolecular interactions
+    if not arg.intramolecular:
+        # Remove every time two of the same seg appears in column name
+        regex_statement = ':' + arg.seg1[-1] + '.*?:' + arg.seg1[-1]
+        interaction_map = interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1)
     # Plot data as heatmap
-    my_map = sns.heatmap(interaction_map.T, vmin=0, vmax=2, xticklabels=False, yticklabels=1, cbar=False, ax=ax[0], cmap='YlGnBu')
+    my_map = sns.heatmap(interaction_map.T, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
     # Add black frame around heatmap
     for _, spine in my_map.spines.items():
         spine.set_visible(True)
     print('\r   PROGRESS:     ', interaction_name, end='', flush=True)
 print('\r   PROGRESS:     ', interaction_name, end=' (DONE)\n', flush=True)
 
-# Load and plot RMSD of seg1 vs. frame 0 ref and seg2 vs. frame 0 ref
-rmsd_data = pd.read_csv(os.path.join('temp_pdb', name + '_rmsd.dat'), header=None)
-rmsd_data.columns = ['Frame', str(arg.seg1_name), str(arg.seg2_name)]
-for ax in [axes1, axes2, axes3, axes4]:
-    sns.lineplot(x=time, y=rmsd_data[str(arg.seg1_name)].values, label=arg.seg1_name, ax=ax[-1])
-    sns.lineplot(x=time, y=rmsd_data[str(arg.seg2_name)].values, label=arg.seg2_name, ax=ax[-1])
-    # Set legends, labels, enable minor ticks, and set x limits
-    ax[-1].legend(title='Segments', loc='center left', fancybox=True, bbox_to_anchor=(1, 0.5))
-    ax[-1].set_ylabel('RMSD (Å)', fontsize=label_size)
-    ax[-1].set_xlabel(arg.x_label, fontsize=label_size)
-    ax[-1].xaxis.set_minor_locator(AutoMinorLocator())
-    ax[-1].set(xlim=(0, time[-1]))
-    # Generate X tick labels for heatmap (heatmap order is categorical, not numeric, so default xticks will be 103, 134, 162,... instead of 100, 200, 300,...)
-    major_xticks = list(ax[-1].get_xticks(minor=False))[:-1]  # Skip last one because it is not plotted for some reason
-    minor_xticks = list(ax[-1].get_xticks(minor=True))
-    major_xtick_locations = []
-    major_xtick_labels = []
-    minor_xtick_locations = []
-    # When I wrote this code, only God and I knew how it worked. Now, only God knows how it works.
-    for t in major_xticks:
-        correction_factor = 1 / len(time) * closest(time, t)
-        time_index = round(len(time) * t / arg.time_total + correction_factor, 2)
-        major_xtick_locations.append(time_index)
-        major_xtick_labels.append(int(t))
-    for t in minor_xticks:
-        correction_factor = 1 / len(time) * closest(time, t)
-        time_index = round(len(time) * t / arg.time_total + correction_factor, 2)
-        minor_xtick_locations.append(time_index)
-    # Set xticks for interaction map
-    ax[0].set_xticks(major_xtick_locations)
-    ax[0].set_xticklabels(major_xtick_labels)
-    ax[0].set_xticks(minor_xtick_locations, minor=True)
-    # Set rotation of yticks for interaction map to 0
-    ax[0].yaxis.set_tick_params(rotation=0)
+# This section is only used to generate nice looking x labels for the heatmap (heatmap order is categorical, not numeric, so default xticks will be 103, 134, 162,... instead of 100, 200, 300,...)
+dummy_ax = Axes(Figure(), [0, 0, 1, 1])
+sns.lineplot(x=time, y=range(len(time)), ax=dummy_ax)
+dummy_ax.xaxis.set_minor_locator(AutoMinorLocator())
+dummy_ax.set(xlim=(0, time[-1]))
+major_xticks = list(dummy_ax.get_xticks(minor=False))[:-1]  # Skip last one because it is not plotted for some reason
+minor_xticks = list(dummy_ax.get_xticks(minor=True))
+major_xtick_locations = []
+major_xtick_labels = []
+minor_xtick_locations = []
 
-# Set titles of plots
+# When I wrote this code, only God and I knew how it worked. Now, only God knows how it works
+for t in major_xticks:
+    correction_factor = 1 / len(time) * closest(time, t)
+    time_index = round(len(time) * t / arg.time_total + correction_factor, 2)
+    major_xtick_locations.append(time_index)
+    major_xtick_labels.append(int(t))
+for t in minor_xticks:
+    correction_factor = 1 / len(time) * closest(time, t)
+    time_index = round(len(time) * t / arg.time_total + correction_factor, 2)
+    minor_xtick_locations.append(time_index)
+
+# Set xticks for interaction map, set rotation of yticks for interaction map to 0
+for ax in [axes1, axes2, axes3, axes4]:
+    ax.set_xticks(major_xtick_locations)
+    ax.set_xticklabels(major_xtick_labels)
+    ax.set_xticks(minor_xtick_locations, minor=True)
+    ax.yaxis.set_tick_params(rotation=0)
+
+# Set titles and labels of plots
 for ax, interaction_name in zip([axes1, axes2, axes3, axes4], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
-    ax[0].set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1.04, fontsize=title_size)
+    ax.set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1.02, fontsize=title_size)
+    ax.set_xlabel(arg.x_label, fontsize=label_size)
 
 ################################################################################################
 
@@ -471,6 +470,18 @@ for ax, interaction_name in zip([axes1, axes2, axes3, axes4], ['Hydrogen Bonding
 print('\nPlots are saved as:')
 for figure, interaction_map, interaction_name in zip(['hbonds', 'hydrophobic', 'salt_bridges', 'pication_pi'], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
     plt.figure(figure)
-    plt.savefig(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'), dpi=300)
+    plt.savefig(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'), bbox_inches='tight', dpi=200)
     print(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'))
-print("\n _._     _,-'\"\"`-._\n,-.`._,'(       |\\`-/|\n    `-.-' \\ )-`( , o o)\n          `-    \\`_`\"'-")
+
+print(' /\\     /\\')
+print('{  `---\'  \\}')
+print('{  O   O  }')
+print('~~>  V  <~~')
+print(' \\  \\|/  /')
+print('  `-----\'__')
+print('  /     \\  `^\_')
+print(' {       }\\ |\\_\\_   W')
+print(' |  \\_/  |/ /  \\_\\_( )')
+print('  \\__/  /(_E     \\__/')
+print('    (  /')
+print('     MM')
