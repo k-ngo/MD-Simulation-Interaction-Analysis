@@ -55,6 +55,7 @@ Python3, VMD, OpenBabel, Plip
                                               --skipcommand         skip running VMD commands to generate input data
                                               --labelsize SIZE      label font size (default = 20)
    ```
+ 3. If desired, tweak interaction detection thresholds (e.g, max distance between hydrogen bond donor and acceptor) in the "Thresholds for detection" section in the code.
    
  **Examples:**
 
