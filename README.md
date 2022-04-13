@@ -8,9 +8,11 @@
 3. Pi-pi
 4. Cation-pi
 5. Salt bridges
+
 Note: Pi-pi and cation-pi are plotted together as pi/cation-pi since there are few of them in general.
 
 **Requirements:**
+
 Python3, VMD, OpenBabel, Plip
 
 **Setup:**
