@@ -162,9 +162,9 @@ if arg.dcd.split('.')[0] == '*':
 seg1_exclude = ''
 seg2_exclude = ''
 if arg.seg1_exclude:
-    seg1_exclude = ' and not (' + str(arg.seg1_exclude) + '))'
+    seg1_exclude = ' and not (' + str(arg.seg1_exclude) + ')'
 if arg.seg2_exclude:
-    seg2_exclude = ' and not (' + str(arg.seg2_exclude) + '))'
+    seg2_exclude = ' and not (' + str(arg.seg2_exclude) + ')'
 
 # Print input information
 print('PSF         :', arg.psf)
