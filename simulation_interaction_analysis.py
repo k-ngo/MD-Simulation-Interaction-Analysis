@@ -185,6 +185,12 @@ os.makedirs('temp_pdb', exist_ok=True)
 os.makedirs('saved_results', exist_ok=True)
 os.makedirs('figures', exist_ok=True)
 
+# Check required files
+for script in ['prot_center.tcl']:
+    if not os.path.exists(script):
+        print('ERROR: Required script', script, 'not found in current directory.')
+        exit(1)
+
 # Load simulation trajectory and extract data
 vmd_cmd_file = file_name + '_vmd_cmd.tcl'
 
