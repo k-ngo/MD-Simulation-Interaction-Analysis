@@ -60,3 +60,5 @@ In a folder containing one .psf file and one .dcd file of a 1000 ns long simulat
 
 The same as above, but now you want to exclude certain residues that belong to the first segment from analysis: _python3 simulation_interaction_analysis.py -t 1000 -s1 PROR -s2 PROA -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318)"_
 
+The same as above, but you want to read the simulation trajectory every 2 frames instead of all frames: _python3 simulation_interaction_analysis.py -t 1000 -s1 PROR -s2 PROA -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318) -s 2"_
+
