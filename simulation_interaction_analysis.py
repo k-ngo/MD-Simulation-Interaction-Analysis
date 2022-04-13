@@ -375,7 +375,7 @@ if not all(os.path.exists(result) for result in saved_results):
         if not arg.intramolecular:
             # Remove every time two of the same seg appears in column name
             regex_statement = ':' + arg.seg1[-1] + '.*?:' + arg.seg1[-1]
-            interaction_map = interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1)
+            interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1, inplace=True)
         interaction_map.to_csv(result)
         print('Saved', interaction_name, 'to', result, 'at frame', frame_count)
         # print(interaction_map)
@@ -423,11 +423,6 @@ for ax, interaction_map, interaction_name in zip([axes1, axes2, axes3, axes4], [
         continue
     # Sort column names by index of key residue
     interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
-    # If simulation is not set to analyze intramolecular interactions, remove all intramolecular interactions
-    if not arg.intramolecular:
-        # Remove every time two of the same seg appears in column name
-        regex_statement = ':' + arg.seg1[-1] + '.*?:' + arg.seg1[-1]
-        interaction_map = interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1)
     # Plot data as heatmap
     my_map = sns.heatmap(interaction_map.T, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
     # Add black frame around heatmap
