@@ -25,6 +25,7 @@ Python3, VMD, OpenBabel, Plip
   pip install --global-option=build_ext --global-option="<INCLUDE_DIR>" --global-option="<LIB_DIR>" plip
   ```
   <INCLUDE_DIR> is "-I/home/**USERNAME**/miniconda3/include/openbabel3" 
+  
   <LIB_DIR> is "-L/home/**USERNAME**/miniconda3/lib"
   
 **Usage:**
