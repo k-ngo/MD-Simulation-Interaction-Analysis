@@ -90,7 +90,10 @@ parser.add_argument('-x', '--xlabel',
                     help='label on x-axis')
 parser.add_argument('--skipcommand',
                     dest='skip_command', action='store_true',
-                    help='skip running VMD commands to generate input data, only set if the script has already been ran at least once')
+                    help='if toggled, skip running VMD commands to generate input data, only set if the script has already been ran at least once')
+parser.add_argument('--sortseg2',
+                    dest='sort_seg2', action='store_true',
+                    help='if toggled, sort interacting residues from seg2 instead of seg1 in ascending order when plotted')
 parser.add_argument('--labelsize',
                     default=20,
                     dest='size', action='store', type=float,
@@ -410,8 +413,8 @@ time = hbonds_map.T.columns.values
 sns.set_context('talk')
 title_size = arg.size
 label_size = arg.size
-fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.2), num='hbonds')  # rows, columns
-fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.2), num='hydrophobic')  # rows, columns
+fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='hbonds')  # rows, columns
+fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='hydrophobic')  # rows, columns
 fig3, axes3 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
 fig4, axes4 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
 
@@ -422,7 +425,10 @@ for ax, interaction_map, interaction_name in zip([axes1, axes2, axes3, axes4], [
         print('Note: no interactions detected for', interaction_name)
         continue
     # Sort column names by index of key residue
-    interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
+    if arg.sort_seg2:
+        interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[1][3:])), axis=1)
+    else:
+        interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
     # Plot data as heatmap
     my_map = sns.heatmap(interaction_map.T, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
     # Add black frame around heatmap
@@ -479,10 +485,4 @@ print('{  `---\'  \\}')
 print('{  O   O  }')
 print('~~>  V  <~~')
 print(' \\  \\|/  /')
-print('  `-----\'__')
-print('  /     \\  `^\_')
-print(' {       }\\ |\\_\\_   W')
-print(' |  \\_/  |/ /  \\_\\_( )')
-print('  \\__/  /(_E     \\__/')
-print('    (  /')
-print('     MM')
+print('  `-----\'')
