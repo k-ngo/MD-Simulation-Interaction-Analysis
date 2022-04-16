@@ -52,7 +52,8 @@ Python3, VMD, OpenBabel, Plip
                                               --intramolecular      account for intramolecular interactions in analysis
                                               --split SPLIT         split each plot into # of smaller plots covering different time periods
                                               -x X_LABEL            label on x-axis (default = Time (ns))
-                                              --skipcommand         skip running VMD commands to generate input data
+                                              --skipcommand         if toggled, skip running VMD commands to generate input data
+                                              --sortseg2            if toggled, sort interacting residues from seg2 instead of seg1 in ascending order
                                               --labelsize SIZE      label font size (default = 20)
    ```
  3. If desired, tweak interaction detection thresholds (e.g, max distance between hydrogen bond donor and acceptor) in the "Thresholds for detection" section in the code.
