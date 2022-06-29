@@ -16,24 +16,6 @@ from matplotlib.figure import Figure
 matplotlib.use('Agg')
 simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
-#################################################################################################################################
-# Areas Formed By Opposing Oxygen Atoms in the Selectivity Filter (SVGFG)  or Select C_alpha Atoms in the Pore (res Y, F, or V) #
-#################################################################################################################################
-# Calculate areas formed by oxygen atoms of the same residue in opposing subunits (A = pi * r_segAC * r_segBD)
-# in the selectivity filter (residues SVGFG) or select C_alpha atoms in the pore (res Y, F, or V) over the course of simulation.
-# Requirement:
-# VMD needs to be set so that it can be opened by invoking "vmd" in the terminal.
-# Usage:
-# 1. Run this script (Python 3)
-#   python3 filter_and_pore_changes.py  -p [.psf file (default=.psf in current dir)]
-#                                       -d [.dcd file (default=.dcd in current dir)]
-#                                       -t [simulation time (default=1000)]
-#                                       -o [location where graph will be saved (default='filter_and_pore_area.png')]
-#   Optional arguments:
-#                                       -n [plot title (default='Selectivity Filter and Pore Areas')]
-#                                       -x [x label (default='Time (ns)')]
-#                                       -s [label size (default=20)]
-
 # Configurations
 PDB_column_width_format = [(0, 4), (4, 11), (11, 16), (16, 20), (20, 22), (22, 26), (26, 38), (38, 46), (46, 54), (54, 60), (60, 66), (66, 90)]
 parser = argparse.ArgumentParser(description='Time Series of Intermolecular Interactions')
