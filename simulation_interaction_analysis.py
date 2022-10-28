@@ -13,6 +13,7 @@ from plip.basic import config
 from warnings import simplefilter
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 matplotlib.use('Agg')
 simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
@@ -29,10 +30,10 @@ parser.add_argument('-d', '--dcd',
                     help='.dcd file containing simulation trajectory (any trajectory format will also work)')
 parser.add_argument('-s1',
                     dest='seg1', action='store',
-                    help='First segment/chain/subunit to consider for analysis (invoked by segname in VMD)')
+                    help='First segment/chain/subunit to consider for analysis (follows VMD format)')
 parser.add_argument('-s2',
                     dest='seg2', action='store',
-                    help='Second segment/chain/subunit to consider for analysis (invoked by segname in VMD)')
+                    help='Second segment/chain/subunit to consider for analysis (follows VMD format)')
 parser.add_argument('-s1n',
                     dest='seg1_name', action='store',
                     help='Name of first segment/chain/subunit to consider for analysis (customized by user)')
@@ -219,7 +220,7 @@ if not arg.skip_command:
 
         f.write('exit')
 
-    # sp.call(['/bin/bash', '-i', '-c', 'vmd -dispdev text -e ' + vmd_cmd_file], stdin=sp.PIPE)
+    sp.call(['/bin/bash', '-i', '-c', 'vmd -dispdev text -e ' + vmd_cmd_file], stdin=sp.PIPE)
 
 # Obtain number of atoms and atom list
 num_atoms = 0
@@ -396,18 +397,18 @@ time = hbonds_map.T.columns.values
 sns.set_context('talk')
 title_size = arg.size
 label_size = arg.size
-fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='hbonds')  # rows, columns
-fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='hydrophobic')  # rows, columns
-fig3, axes3 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
-fig4, axes4 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
-fig5, axes5 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='hbonds')  # rows, columns
-fig6, axes6 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='hydrophobic')  # rows, columns
-fig7, axes7 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
-fig8, axes8 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
+fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='timeseries_hbonds')  # rows, columns
+fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='timeseries_hydrophobic')  # rows, columns
+fig3, axes3 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='timeseries_salt_bridges')  # rows, columns
+fig4, axes4 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='timeseries_pication_pi')  # rows, columns
+fig5, axes5 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='percentage_hbonds')  # rows, columns
+fig6, axes6 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='percentage_hydrophobic')  # rows, columns
+fig7, axes7 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='percentage_salt_bridges')  # rows, columns
+fig8, axes8 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='percentage_pication_pi')  # rows, columns
 
-# Plot interactions as heatmap
+# Plot time series of interactions as heatmap
 print('>> Plotting time series of interactions as heatmaps...')
-for ax, interaction_map, interaction_name in zip([axes1, axes2, axes3, axes4], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
+for (ax1, ax2), interaction_map, interaction_name in zip([(axes1, axes5), (axes2, axes6), (axes3, axes7), (axes4, axes8)], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
     if 'No such contacts encountered' in interaction_map.columns.values:
         print('Note: no interactions detected for', interaction_name)
         continue
@@ -416,15 +417,59 @@ for ax, interaction_map, interaction_name in zip([axes1, axes2, axes3, axes4], [
         interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[1][3:])), axis=1)
     else:
         interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
-    # Plot data as heatmap
-    my_map = sns.heatmap(interaction_map.T, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
+    # Transpose the map
+    interaction_map = interaction_map.T
+    #############################################################################################
+    # Plot time series of interactions as a heatmap
+    #############################################################################################
+    time_series_plot = sns.heatmap(interaction_map, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax1, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
     # Add black frame around heatmap
-    for _, spine in my_map.spines.items():
+    for _, spine in time_series_plot.spines.items():
         spine.set_visible(True)
+    #############################################################################################
+    # Plot the number of interactions for each interacting pair as a percentage of total frames
+    #############################################################################################
+    interaction_map['Total'] = interaction_map.sum(axis=1, numeric_only=True)
+    percentage_interaction_map = pd.DataFrame()
+    # Loop through each row and calculate the percentage of frames that interaction occurs
+    for index, row in interaction_map.iterrows():
+        first_res, second_res = index.split('-')[0], index.split('-')[1]
+        percentage_interaction_map.loc[first_res, second_res] = round(interaction_map['Total'][index] / (len(interaction_map.columns) - 1) * 100, 2)  # -1 here to exclude the 'Total' column from the count
+    # Hide all residues pairs that fail to form specified contact frequency over simulation trajectory when plotting
+    minimum_contact_percentage = 5
+    percentage_interaction_map = percentage_interaction_map.loc[(percentage_interaction_map >= minimum_contact_percentage).any(axis=1)]  # Drop rows
+    percentage_interaction_map = percentage_interaction_map.loc[:, (percentage_interaction_map >= minimum_contact_percentage).any(axis=0)]  # Drop columns
+    # Transpose, then sort column names by index of key residue, then transpose again
+    percentage_interaction_map = percentage_interaction_map.T
+    percentage_interaction_map = percentage_interaction_map.reindex(sorted(percentage_interaction_map.index, key=lambda x: int(x.split(':')[0][1:])), axis=0)
+    # Replace all NaN with zeroes
+    percentage_interaction_map.fillna(0, inplace=True)
+    # Add annotations to display percentage in each cell
+    annotations = percentage_interaction_map.values.astype(str)
+    annotations[annotations == '0.0'] = ''
+    # Plot the data as an interaction matrix
+    percentage_plot = sns.heatmap(percentage_interaction_map, xticklabels=1, yticklabels=1, vmin=0, vmax=100, linewidths=0.4,
+                                  cmap=sns.color_palette('magma', as_cmap=True), cbar=False, annot=annotations, fmt='s', annot_kws={'size': 12}, ax=ax2)
+    for text in percentage_plot.texts:
+        if len(text.get_text()) > 0:
+            text.set_text(text.get_text() + '%')
+    # Generate color bar
+    axins = inset_axes(ax2,
+                       width=0.3,
+                       height=5,
+                       loc='upper right',
+                       bbox_to_anchor=(0.04, 0, 1, 1),
+                       # (x0, y0, width, height) where (x0,y0) are the lower left corner coordinates of the bounding box
+                       bbox_transform=ax2.transAxes,
+                       borderpad=0)
+    cb1 = matplotlib.colorbar.ColorbarBase(axins, cmap=sns.color_palette('magma', as_cmap=True),
+                                           norm=matplotlib.colors.Normalize(vmin=0, vmax=100),
+                                           orientation='vertical')
+    cb1.set_label('% of time contacts are formed')
     print('\r   PROGRESS:     ', interaction_name, end='', flush=True)
 print('\r   PROGRESS:     ', interaction_name, end=' (DONE)\n', flush=True)
 
-# This section is only used to generate nice looking x labels for the heatmap (heatmap order is categorical, not numeric, so default xticks will be 103, 134, 162,... instead of 100, 200, 300,...)
+# This section is only used to generate nice looking x labels for the time series heatmap (heatmap order is categorical, not numeric, so default xticks will be 103, 134, 162,... instead of 100, 200, 300,...)
 dummy_ax = Axes(Figure(), [0, 0, 1, 1])
 sns.lineplot(x=time, y=range(len(time)), ax=dummy_ax)
 dummy_ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -446,23 +491,36 @@ for t in minor_xticks:
     time_index = round(len(time) * t / arg.time_total + correction_factor, 2)
     minor_xtick_locations.append(time_index)
 
-# Set xticks for interaction map, set rotation of yticks for interaction map to 0
+# Set xticks for time series interaction map, set rotation of y ticks to 0
 for ax in [axes1, axes2, axes3, axes4]:
     ax.set_xticks(major_xtick_locations)
     ax.set_xticklabels(major_xtick_labels)
     ax.set_xticks(minor_xtick_locations, minor=True)
     ax.yaxis.set_tick_params(rotation=0)
 
+# Set rotation of x and y ticks for percentage interaction map
+for ax in [axes5, axes6, axes7, axes8]:
+    ax.xaxis.set_tick_params(rotation=45)
+    ax.yaxis.set_tick_params(rotation=0)
+
 # Set titles and labels of plots
 for ax, interaction_name in zip([axes1, axes2, axes3, axes4], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
-    ax.set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1.02, fontsize=title_size)
+    ax.set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
+    ax.set_xlabel(arg.x_label, fontsize=label_size)
+
+for ax, interaction_name in zip([axes5, axes6, axes7, axes8], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
+    ax.set_title('Percentage of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
     ax.set_xlabel(arg.x_label, fontsize=label_size)
 
 ################################################################################################
 
 # Save figures
 print('\nPlots are saved as:')
-for figure, interaction_map, interaction_name in zip(['hbonds', 'hydrophobic', 'salt_bridges', 'pication_pi'], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
+for figure, interaction_map, interaction_name in zip(['timeseries_hbonds', 'timeseries_hydrophobic', 'timeseries_salt_bridges', 'timeseries_pication_pi'], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
+    plt.figure(figure)
+    plt.savefig(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'), bbox_inches='tight', dpi=200)
+    print(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'))
+for figure, interaction_map, interaction_name in zip(['percentage_hbonds', 'percentage_hydrophobic', 'percentage_salt_bridges', 'percentage_pication_pi'], [hbonds_map, hydrophobic_map, salt_bridges_map, pication_pi_map], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
     plt.figure(figure)
     plt.savefig(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'), bbox_inches='tight', dpi=200)
     print(os.path.join('figures', file_name + '_' + figure + '_' + name + '.png'))
