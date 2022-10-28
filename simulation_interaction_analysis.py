@@ -87,7 +87,8 @@ aa_names = {'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D',
             'CYS': 'C', 'GLU': 'E', 'GLN': 'Q', 'GLY': 'G',
             'HIS': 'H', 'ILE': 'I', 'LEU': 'L', 'LYS': 'K',
             'MET': 'M', 'PHE': 'F', 'PRO': 'P', 'SER': 'S',
-            'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'}
+            'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
+            'SAP': '*'}
 
 # Thresholds for detection (global variables)
 config.BS_DIST = 7.5  # Determines maximum distance to include binding site residues
@@ -189,11 +190,11 @@ if not arg.skip_command:
         f.write('source prot_center.tcl\n')
 
         # Set interacting segment names
-        f.write('set seg1 ' + str(arg.seg1) + '\n')
-        f.write('set seg2 ' + str(arg.seg2) + '\n')
+        f.write('set seg1 "' + str(arg.seg1) + '"\n')
+        f.write('set seg2 "' + str(arg.seg2) + '"\n')
 
         # Obtain atoms from segment of interest
-        f.write('set sel [atomselect top "(segname $seg1' + seg1_exclude + ') or (segname $seg2' + seg2_exclude + ')"]\n')
+        f.write('set sel [atomselect top "($seg1' + seg1_exclude + ') or ($seg2' + seg2_exclude + ')"]\n')
         f.write('animate write pdb ' + interactions_pdb + ' skip 1 sel $sel\n')
 
         # Initialize files to store data
@@ -206,9 +207,9 @@ if not arg.skip_command:
 
         f.write('for {set f 0} {$f < $nf} {incr f} {\n')
         # Loop through each frame to look at residues from seg1 that interact with those from seg2
-        f.write('set interacting_resid_seg1 [atomselect top "(segname $seg1' + seg1_exclude + ') and name CA and same residue as within ' + str(config.BS_DIST) + ' of (segname $seg2' + seg2_exclude + ')" frame $f]\n')
+        f.write('set interacting_resid_seg1 [atomselect top "($seg1' + seg1_exclude + ') and same residue as within ' + str(config.BS_DIST) + ' of ($seg2' + seg2_exclude + ')" frame $f]\n')
         # as well as residues from seg2 that do not interact with those from seg1
-        f.write('set noninteracting_resid_seg2 [atomselect top "(segname $seg2' + seg2_exclude + ') and name CA and not same residue as within ' + str(config.BS_DIST) + ' of (segname $seg1' + seg1_exclude + ')" frame $f]\n')
+        f.write('set noninteracting_resid_seg2 [atomselect top "($seg2' + seg2_exclude + ') and not same residue as within ' + str(config.BS_DIST) + ' of ($seg1' + seg1_exclude + ')" frame $f]\n')
 
         f.write('puts $out1 "[$interacting_resid_seg1 get resid]"\n')
         f.write('puts $out2 "[$noninteracting_resid_seg2 get resid]" }\n')
@@ -218,7 +219,7 @@ if not arg.skip_command:
 
         f.write('exit')
 
-    sp.call(['/bin/bash', '-i', '-c', 'vmd -dispdev text -e ' + vmd_cmd_file], stdin=sp.PIPE)
+    # sp.call(['/bin/bash', '-i', '-c', 'vmd -dispdev text -e ' + vmd_cmd_file], stdin=sp.PIPE)
 
 # Obtain number of atoms and atom list
 num_atoms = 0
@@ -399,6 +400,10 @@ fig1, axes1 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3)
 fig2, axes2 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='hydrophobic')  # rows, columns
 fig3, axes3 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
 fig4, axes4 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
+fig5, axes5 = plt.subplots(1, 1, figsize=(19, 3 + len(hbonds_map.columns) * 0.3), num='hbonds')  # rows, columns
+fig6, axes6 = plt.subplots(1, 1, figsize=(19, 3 + len(hydrophobic_map.columns) * 0.3), num='hydrophobic')  # rows, columns
+fig7, axes7 = plt.subplots(1, 1, figsize=(19, 3 + len(salt_bridges_map.columns) * 0.2), num='salt_bridges')  # rows, columns
+fig8, axes8 = plt.subplots(1, 1, figsize=(19, 3 + len(pication_pi_map.columns) * 0.2), num='pication_pi')  # rows, columns
 
 # Plot interactions as heatmap
 print('>> Plotting time series of interactions as heatmaps...')
