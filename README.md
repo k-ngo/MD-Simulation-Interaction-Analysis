@@ -36,8 +36,8 @@ Python3, VMD, OpenBabel, Plip
    ```
    python3 simulation_interaction_analysis.py -p PSF, --psf PSF     .psf file containing protein structural information
                                               -d DCD, --dcd DCD     .dcd file containing simulation trajectory (any trajectory format will also work)
-                                              -s1 SEG1              First segment/chain/subunit to consider for analysis (invoked by segname in VMD)
-                                              -s2 SEG2              Second segment/chain/subunit to consider for analysis (invoked by segname in VMD)
+                                              -s1 SEG1              First segment/chain/subunit to consider for analysis (follows VMD format)
+                                              -s2 SEG2              Second segment/chain/subunit to consider for analysis (follows VMD format)
                                               -s1n SEG1_NAME        Name of first segment/chain/subunit to consider for analysis (customized by user)
                                               -s2n SEG2_NAME        Name of second segment/chain/subunit to consider for analysis (customized by user)
                                               -s1x SEG1_EXCLUDE     Exclude this VMD selection from the first segment/chain/subunit
@@ -60,9 +60,9 @@ Python3, VMD, OpenBabel, Plip
    
  **Examples:**
 
-In a folder containing one .psf file and one .dcd file of a 1000 ns long simulation, you want to analyze the interactions between segname PROR (named for B1AR) and segname PROA (named for Ga): _python3 simulation_interaction_analysis.py -t 1000 -s1 PROR -s2 PROA -s1n B1AR -s2n Ga_
+In a folder containing one .psf file and one .dcd file of a 1000 ns long simulation, you want to analyze the interactions between segname PROR (named for B1AR) and segname PROA (named for Ga): _python3 simulation_interaction_analysis.py -t 1000 -s1 "segname PROR" -s2 "segname PROA" -s1n B1AR -s2n Ga_
 
-The same as above, but now you want to exclude certain residues that belong to the first segment from analysis: _python3 simulation_interaction_analysis.py -t 1000 -s1 PROR -s2 PROA -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318)"_
+The same as above, but now you want to exclude certain residues that belong to the first segment from analysis: _python3 simulation_interaction_analysis.py -t 1000 -s1 "segname PROR" -s2 "segname PROA" -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318)"_
 
-The same as above, but you want to read the simulation trajectory every 2 frames instead of all frames: _python3 simulation_interaction_analysis.py -t 1000 -s1 PROR -s2 PROA -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318) -s 2"_
+The same as above, but you want to read the simulation trajectory every 2 frames instead of all frames: _python3 simulation_interaction_analysis.py -t 1000 -s1 "segname PROR" -s2 "segname PROA" -s1n B1AR -s2n Ga -s1x "(resid 392 to 402) or (resid 255 to 318) -s 2"_
 
