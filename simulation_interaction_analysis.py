@@ -14,6 +14,8 @@ from warnings import simplefilter
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import time
+from datetime import timedelta
 matplotlib.use('Agg')
 simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
@@ -29,24 +31,26 @@ parser.add_argument('-d', '--dcd',
                     dest='dcd', action='store',
                     help='.dcd file containing simulation trajectory (any trajectory format will also work)')
 parser.add_argument('-s1',
-                    dest='seg1', action='store',
-                    help='First segment/chain/subunit to consider for analysis (follows VMD format)')
+                    dest='sel1', action='store',
+                    help='First segment/chain/subunit to consider for analysis (follows VMD format for selection)')
 parser.add_argument('-s2',
-                    dest='seg2', action='store',
-                    help='Second segment/chain/subunit to consider for analysis (follows VMD format)')
+                    dest='sel2', action='store',
+                    help='Second segment/chain/subunit to consider for analysis (follows VMD format for selection)')
 parser.add_argument('-s1n',
-                    dest='seg1_name', action='store',
+                    default='SEL1',
+                    dest='sel1_name', action='store',
                     help='Name of first segment/chain/subunit to consider for analysis (customized by user)')
 parser.add_argument('-s2n',
-                    dest='seg2_name', action='store',
+                    default='SEL2',
+                    dest='sel2_name', action='store',
                     help='Name of second segment/chain/subunit to consider for analysis (customized by user)')
 parser.add_argument('-s1x',
                     default='',
-                    dest='seg1_exclude', action='store',
+                    dest='sel1_exclude', action='store',
                     help='Exclude this VMD selection from the first segment/chain/subunit')
 parser.add_argument('-s2x',
                     default='',
-                    dest='seg2_exclude', action='store',
+                    dest='sel2_exclude', action='store',
                     help='Exclude this VMD selection from the second segment/chain/subunit')
 parser.add_argument('-t', '--time',
                     default=777,
@@ -74,9 +78,9 @@ parser.add_argument('-x', '--xlabel',
 parser.add_argument('--skipcommand',
                     dest='skip_command', action='store_true',
                     help='if toggled, skip running VMD commands to generate input data, only set if the script has already been ran at least once')
-parser.add_argument('--sortseg2',
-                    dest='sort_seg2', action='store_true',
-                    help='if toggled, sort interacting residues from seg2 instead of seg1 in ascending order when plotted')
+parser.add_argument('--sortsel2',
+                    dest='sort_sel2', action='store_true',
+                    help='if toggled, sort interacting residues from sel2 instead of sel1 in ascending order when plotted')
 parser.add_argument('--labelsize',
                     default=20,
                     dest='size', action='store', type=float,
@@ -146,26 +150,26 @@ if arg.dcd.split('.')[0] == '*':
     arg.dcd = glob.glob('*.' + arg.dcd.split('.')[-1])[0]
 
 # If there are atoms to be excluded, generate VMD commands to do so
-seg1_exclude = ''
-seg2_exclude = ''
-if arg.seg1_exclude:
-    seg1_exclude = ' and not (' + str(arg.seg1_exclude) + ')'
-if arg.seg2_exclude:
-    seg2_exclude = ' and not (' + str(arg.seg2_exclude) + ')'
+sel1_exclude = ''
+sel2_exclude = ''
+if arg.sel1_exclude:
+    sel1_exclude = ' and not (' + str(arg.sel1_exclude) + ')'
+if arg.sel2_exclude:
+    sel2_exclude = ' and not (' + str(arg.sel2_exclude) + ')'
 
 # Print input information
 print('PSF         :', arg.psf)
 print('DCD         :', arg.dcd)
-print('1st Segment :', arg.seg1_name, '-', arg.seg1)
-if arg.seg1_exclude:
-    print('              excluding', str(arg.seg1_exclude))
-print('2nd Segment :', arg.seg2_name, '-', arg.seg2)
-if arg.seg2_exclude:
-    print('              excluding', str(arg.seg2_exclude))
+print('1st Selection :', arg.sel1_name, '-', arg.sel1)
+if arg.sel1_exclude:
+    print('              excluding', str(arg.sel1_exclude))
+print('2nd Selection :', arg.sel2_name, '-', arg.sel2)
+if arg.sel2_exclude:
+    print('              excluding', str(arg.sel2_exclude))
 
-name = str(arg.seg1_name) + '_' + str(arg.seg2_name)
+name = str(arg.sel1_name) + '_' + str(arg.sel2_name)
 file_name = '.'.join(arg.dcd.split('.')[:-1])
-interactions_pdb = os.path.join('temp_pdb', str(arg.seg1_name) + '_' + str(arg.seg2_name) + '.pdb')
+interactions_pdb = os.path.join('temp_pdb', str(arg.sel1_name) + '_' + str(arg.sel2_name) + '.pdb')
 
 # Create folders to store data and output
 os.makedirs('temp_pdb', exist_ok=True)
@@ -191,29 +195,35 @@ if not arg.skip_command:
         f.write('source prot_center.tcl\n')
 
         # Set interacting segment names
-        f.write('set seg1 "' + str(arg.seg1) + '"\n')
-        f.write('set seg2 "' + str(arg.seg2) + '"\n')
+        f.write('set sel1 "' + str(arg.sel1) + '"\n')
+        f.write('set sel2 "' + str(arg.sel2) + '"\n')
 
         # Obtain atoms from segment of interest
-        f.write('set sel [atomselect top "($seg1' + seg1_exclude + ') or ($seg2' + seg2_exclude + ')"]\n')
+        f.write('set sel [atomselect top "($sel1' + sel1_exclude + ') or ($sel2' + sel2_exclude + ')"]\n')
         f.write('animate write pdb ' + interactions_pdb + ' skip 1 sel $sel\n')
 
         # Initialize files to store data
-        f.write('set outputname_seg1 "' + os.path.join('temp_pdb', name + '_interacting_residues_seg1.dat') + '"\n')
-        f.write('set outputname_seg2 "' + os.path.join('temp_pdb', name + '_noninteracting_residues_seg2.dat') + '"\n')
+        f.write('set outputname_sel1_resid "' + os.path.join('temp_pdb', name + '_interacting_residues_sel1_resid.dat') + '"\n')
+        f.write('set outputname_sel2_resid "' + os.path.join('temp_pdb', name + '_noninteracting_residues_sel2_resid.dat') + '"\n')
+        f.write('set outputname_sel1_segname "' + os.path.join('temp_pdb', name + '_interacting_residues_sel1_segname.dat') + '"\n')
+        f.write('set outputname_sel2_segname "' + os.path.join('temp_pdb', name + '_noninteracting_residues_sel2_segname.dat') + '"\n')
 
         f.write('set nf [molinfo top get numframes]\n')
-        f.write('set out1 [open ${outputname_seg1} w]\n')
-        f.write('set out2 [open ${outputname_seg2} w]\n')
+        f.write('set out1 [open ${outputname_sel1_resid} w]\n')
+        f.write('set out2 [open ${outputname_sel2_resid} w]\n')
+        f.write('set out3 [open ${outputname_sel1_segname} w]\n')
+        f.write('set out4 [open ${outputname_sel2_segname} w]\n')
 
         f.write('for {set f 0} {$f < $nf} {incr f} {\n')
-        # Loop through each frame to look at residues from seg1 that interact with those from seg2
-        f.write('set interacting_resid_seg1 [atomselect top "($seg1' + seg1_exclude + ') and same residue as within ' + str(config.BS_DIST) + ' of ($seg2' + seg2_exclude + ')" frame $f]\n')
-        # as well as residues from seg2 that do not interact with those from seg1
-        f.write('set noninteracting_resid_seg2 [atomselect top "($seg2' + seg2_exclude + ') and not same residue as within ' + str(config.BS_DIST) + ' of ($seg1' + seg1_exclude + ')" frame $f]\n')
+        # Loop through each frame to look at residues from sel1 that interact with those from sel2
+        f.write('set interacting_sel1 [atomselect top "($sel1' + sel1_exclude + ') and same residue as within ' + str(config.BS_DIST) + ' of ($sel2' + sel2_exclude + ')" frame $f]\n')
+        # as well as residues from sel2 that do not interact with those from sel1
+        f.write('set noninteracting_sel2 [atomselect top "($sel2' + sel2_exclude + ') and not same residue as within ' + str(config.BS_DIST) + ' of ($sel1' + sel1_exclude + ')" frame $f]\n')
 
-        f.write('puts $out1 "[$interacting_resid_seg1 get resid]"\n')
-        f.write('puts $out2 "[$noninteracting_resid_seg2 get resid]" }\n')
+        f.write('puts $out1 "[$interacting_sel1 get resid]"\n')
+        f.write('puts $out2 "[$noninteracting_sel2 get resid]"\n')
+        f.write('puts $out3 "[$interacting_sel1 get segname]"\n')
+        f.write('puts $out4 "[$noninteracting_sel2 get segname]" }\n')
 
         f.write('close $out1\n')
         f.write('close $out2\n')
@@ -231,13 +241,20 @@ with open(interactions_pdb) as f:
             break
         num_atoms += 1
 
-# Read IDs of residues from seg1 that can possibly interact with seg2
-with open(os.path.join('temp_pdb', name + '_interacting_residues_seg1.dat')) as f:
-    interacting_resid_seg1 = [list(map(int, i.split())) for i in f.read().splitlines()]
+# Read IDs and segname of residues from sel1 that can possibly interact with sel2
+with open(os.path.join('temp_pdb', name + '_interacting_residues_sel1_resid.dat')) as f:
+    interacting_sel1_resid = [list(map(int, i.split())) for i in f.read().splitlines()]
+with open(os.path.join('temp_pdb', name + '_interacting_residues_sel1_segname.dat')) as f:
+    interacting_sel1_segname = [i.split() for i in f.read().splitlines()]
 
-# Read IDs of residues from seg2 that cannot possibly interact with seg1
-with open(os.path.join('temp_pdb', name + '_noninteracting_residues_seg2.dat')) as f:
-    noninteracting_resid_seg2 = [list(map(int, i.split())) for i in f.read().splitlines()]
+# Read IDs and segname of residues from sel2 that cannot possibly interact with sel1
+with open(os.path.join('temp_pdb', name + '_noninteracting_residues_sel2_resid.dat')) as f:
+    noninteracting_sel2_resid = [list(map(int, i.split())) for i in f.read().splitlines()]
+with open(os.path.join('temp_pdb', name + '_noninteracting_residues_sel2_segname.dat')) as f:
+    noninteracting_sel2_segname = [i.split() for i in f.read().splitlines()]
+
+# Obtain number of frames
+num_frames = max([len(interacting_sel1_resid), len(noninteracting_sel2_resid)])
 
 # Set up interaction maps
 # ['H-bonds', 'Hydrophobic', 'Water bridges', 'Salt bridges', 'π/cation-π']
@@ -251,8 +268,13 @@ frame_count = 0
 print('\nAnalyzing molecular interactions...')
 # Look for previous results first, if not saved then proceed with calculations
 saved_results = [os.path.join('saved_results', file_name + '_' + figure + '_' + name + '.csv') for figure in ['hbonds', 'hydrophobic', 'salt_bridges', 'pication_pi']]
+start = time.time()
 if not all(os.path.exists(result) for result in saved_results):
     for frame in pd.read_fwf(interactions_pdb, chunksize=num_atoms + 1, header=None, colspecs=PDB_column_width_format, skiprows=1):
+        # Check for emergency stop signal
+        if os.path.exists('STOP'):
+            print('>>>>>>>>>>>>>>>>>>>>>> STOPPING <<<<<<<<<<<<<<<<<<<<<<')
+            exit(1)
         # Delete last line (containing just 'END'), reset index to 0, and name columns
         frame.drop(frame.index[[-1]], inplace=True)
         frame.reset_index(drop=True, inplace=True)
@@ -263,15 +285,15 @@ if not all(os.path.exists(result) for result in saved_results):
         frame['ResNum'] = frame['ResNum'].astype(int)
         # frame.loc[frame['Residue'] != 'TIP', 'SeqNum'] += 401
         frame['Index'] = frame['Index'].astype(int)
-        # Convert residues from seg1 that interact with those from seg2 to HETATM to serve as "ligands" for analysis
-        for res in interacting_resid_seg1[frame_count]:
-            frame.loc[(frame['ResNum'] == res) & (frame['Segment'] == arg.seg1), 'Atom'] = 'HETATM'
-        # Remove residues from seg2 that do not interact with residues from seg1
-        for res in noninteracting_resid_seg2[frame_count]:
-            frame.drop(frame.loc[(frame['ResNum'] == res) & (frame['Segment'] == arg.seg2)].index, inplace=True)
-        # If simulation is not set to analyze intramolecular interactions, remove all residues from seg1 that do not interact with seg2
-        if not arg.intramolecular:
-            frame.drop(frame.loc[(frame['Atom'] == 'ATOM') & (frame['Segment'] == arg.seg1)].index, inplace=True)
+        # Convert residues from sel1 that interact with those from sel2 to HETATM to serve as "ligands" for analysis
+        for res, segname in zip(interacting_sel1_resid[frame_count], interacting_sel1_segname[frame_count]):
+            frame.loc[(frame['ResNum'] == res) & (frame['Segment'] == segname), 'Atom'] = 'HETATM'
+        # Remove residues from sel2 that do not interact with residues from sel1
+        for res, segname in zip(noninteracting_sel2_resid[frame_count], noninteracting_sel2_segname[frame_count]):
+            frame.drop(frame.loc[(frame['ResNum'] == res) & (frame['Segment'] == segname)].index, inplace=True)
+        # # (DEPRECATED) If simulation is not set to analyze intramolecular interactions, remove all residues from sel1 that do not interact with sel2
+        # if not arg.intramolecular:
+        #     frame.drop(frame.loc[(frame['Atom'] == 'ATOM') & (frame['Segment'] == arg.sel1)].index, inplace=True)
         # Convert "HSD" to "HIS"
         frame.loc[frame['Residue'] == 'HSD', 'Residue'] = 'HIS'
         # Fix chain name
@@ -350,8 +372,16 @@ if not all(os.path.exists(result) for result in saved_results):
                 interaction_map.loc[frame_count] = np.NaN
 
         frame_count += 1
-        if frame_count % 5 == 0:
+        if frame_count % 2 == 0:
             print('\r   PROGRESS:     ', frame_count, end=' frames', flush=True)
+
+            time_elapsed = time.time() - start
+            avg_time_per_frame = time_elapsed / frame_count
+            frames_left = num_frames - frame_count
+            print('\r   PROGRESS:     ', frame_count, 'frames',
+                  '| TIME ELAPSE:', timedelta(seconds=time_elapsed),
+                  '| TIME TO COMPLETION: ', timedelta(seconds=frames_left * avg_time_per_frame), end=' ', flush=True)
+
         # if frame_count % 10 == 0:
         #     break
     print('\r   PROGRESS:     ', frame_count, end=' frames (DONE)\n', flush=True)
@@ -361,13 +391,15 @@ if not all(os.path.exists(result) for result in saved_results):
         # If simulation is not set to analyze intramolecular interactions, remove all intramolecular interactions
         if not arg.intramolecular:
             # Remove every time two of the same seg appears in column name
-            regex_statement = ':' + arg.seg1[-1] + '.*?:' + arg.seg1[-1]
+            regex_statement = ':' + arg.sel1[-1] + '.*?:' + arg.sel1[-1]
             interaction_map.drop(interaction_map.filter(regex=regex_statement).columns, axis=1, inplace=True)
         interaction_map.to_csv(result)
         print('Saved', interaction_name, 'to', result, 'at frame', frame_count)
         # print(interaction_map)
 else:
+    print('******************************************************')
     print('Previously saved results found. Skipping calculations!')
+    print('******************************************************')
     hbonds_map = pd.read_csv(saved_results[0], index_col=0)
     print('Loaded', saved_results[0], '(last frame:', str(hbonds_map.index.values[-1] + 1) + ')')
     hydrophobic_map = pd.read_csv(saved_results[1], index_col=0)
@@ -378,6 +410,7 @@ else:
     print('Loaded', saved_results[3], '(last frame:', str(pication_pi_map.index.values[-1] + 1) + ')')
     print('WARNING: User must manually verify frame count stated above is as desired before proceeding!')
     print('         If not, delete all saved files to start fresh calculations.')
+    print('******************************************************')
     frame_count = str(hbonds_map.index.values[-1] + 1)
 
 # Fill all np.NaN with zeros
@@ -413,7 +446,7 @@ for (ax1, ax2), interaction_map, interaction_name in zip([(axes1, axes5), (axes2
         print('Note: no interactions detected for', interaction_name)
         continue
     # Sort column names by index of key residue
-    if arg.sort_seg2:
+    if arg.sort_sel2:
         interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[1][3:])), axis=1)
     else:
         interaction_map = interaction_map.reindex(sorted(interaction_map.columns, key=lambda x: int(x.split(':')[0][1:])), axis=1)
@@ -422,7 +455,7 @@ for (ax1, ax2), interaction_map, interaction_name in zip([(axes1, axes5), (axes2
     #############################################################################################
     # Plot time series of interactions as a heatmap
     #############################################################################################
-    time_series_plot = sns.heatmap(interaction_map, vmin=0, vmax=1, xticklabels=False, yticklabels=1, cbar=False, ax=ax1, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
+    time_series_plot = sns.heatmap(interaction_map, vmin=0, vmax=1, xticklabels=False, yticklabels=1, linewidths=0.4, cbar=False, ax=ax1, cmap=matplotlib.colors.ListedColormap(['#ffffff', '#284b63']))
     # Add black frame around heatmap
     for _, spine in time_series_plot.spines.items():
         spine.set_visible(True)
@@ -505,11 +538,11 @@ for ax in [axes5, axes6, axes7, axes8]:
 
 # Set titles and labels of plots
 for ax, interaction_name in zip([axes1, axes2, axes3, axes4], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
-    ax.set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
+    ax.set_title('Time Series of ' + interaction_name + ' Interactions Between ' + str(arg.sel1_name) + ' & ' + str(arg.sel2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
     ax.set_xlabel(arg.x_label, fontsize=label_size)
 
 for ax, interaction_name in zip([axes5, axes6, axes7, axes8], ['Hydrogen Bonding', 'Hydrophobic', 'Salt Bridges', 'π/cation-π']):
-    ax.set_title('Percentage of ' + interaction_name + ' Interactions Between ' + str(arg.seg1_name) + ' & ' + str(arg.seg2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
+    ax.set_title('Percentage of ' + interaction_name + ' Interactions Between ' + str(arg.sel1_name) + ' & ' + str(arg.sel2_name) + ' - ' + '.'.join(arg.dcd.split('.')[:-1]), y=1, fontsize=title_size)
     ax.set_xlabel(arg.x_label, fontsize=label_size)
 
 ################################################################################################
