@@ -24,7 +24,7 @@ simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 # Configurations
 PDB_column_width_format = [(0, 4), (4, 11), (11, 16), (16, 20), (20, 22), (22, 26), (26, 38), (38, 46), (46, 54), (54, 60), (60, 66), (66, 90)]
 parser = argparse.ArgumentParser(description='Molecular Interaction Analysis')
-parser.add_argument('-b', '--pdb',
+parser.add_argument('--pdb',
                     default=None,
                     dest='pdb', action='store',
                     help='.pdb file for single-frame analysis')
@@ -50,6 +50,14 @@ parser.add_argument('-s2n',
                     default='SEL2',
                     dest='sel2_name', action='store',
                     help='Name of second segment/chain/subunit to consider for analysis (customized by user)')
+parser.add_argument('-s1i',
+                    default=None,
+                    dest='sel1_identifier', action='store',
+                    help='(OPTIONAL) 1 letter identifier of first segment/chain/subunit to consider for analysis (customized by user)')
+parser.add_argument('-s2i',
+                    default=None,
+                    dest='sel2_identifier', action='store',
+                    help='(OPTIONAL) 1 letter identifier of second segment/chain/subunit to consider for analysis (customized by user)')
 parser.add_argument('-s1x',
                     default='',
                     dest='sel1_exclude', action='store',
@@ -62,10 +70,14 @@ parser.add_argument('-t', '--time',
                     default=777,
                     dest='time_total', action='store', type=float,
                     help='total simulation time of the full provided trajectory')
+parser.add_argument('-b', '--begin',
+                    default=0,
+                    dest='begin_frame', action='store', type=int,
+                    help='analyze from this frame of the simulation')
 parser.add_argument('-e', '--end',
                     default=-1,
                     dest='end_frame', action='store', type=int,
-                    help='analyze to which frame of the simulation')
+                    help='analyze to this frame of the simulation')
 parser.add_argument('-s', '--step',
                     default=1,
                     dest='step', action='store', type=int,
@@ -149,10 +161,28 @@ def record_interactions(interaction_list, frame, key_res, interaction_map, temp_
             # Check if key_res and partner_res are the same residue
             if key_res != partner_res:
                 # Record interaction pair to dataframe, place residue in selection 1 first
-                if key_res[1:] in interacting_sel1:
+                # If custom selection identifier is set via -s1i or -s2i arguments, rename chain to match
+                # Sel1 - Sel2
+                if key_res[1:] in interacting_sel1 and partner_res[1:] in interacting_sel2:
+                    if arg.sel1_identifier:
+                        key_res = key_res[:-1] + arg.sel1_identifier
+                    if arg.sel2_identifier:
+                        partner_res = partner_res[:-1] + arg.sel2_identifier
                     interaction_pair = key_res + '-' + partner_res
                     reversed_interaction_pair = partner_res + '-' + key_res
-                elif partner_res[1:] in interacting_sel1:
+                # Sel1 - Sel1
+                elif key_res[1:] in interacting_sel1 and partner_res[1:] in interacting_sel1:
+                    if arg.sel1_identifier:
+                        key_res = key_res[:-1] + arg.sel1_identifier
+                        partner_res = partner_res[:-1] + arg.sel1_identifier
+                    interaction_pair = key_res + '-' + partner_res
+                    reversed_interaction_pair = partner_res + '-' + key_res
+                # Sel2 - Sel1
+                elif partner_res[1:] in interacting_sel1 and key_res[1:] in interacting_sel2:
+                    if arg.sel2_identifier:
+                        key_res = key_res[:-1] + arg.sel2_identifier
+                    if arg.sel1_identifier:
+                        partner_res = partner_res[:-1] + arg.sel1_identifier
                     interaction_pair = partner_res + '-' + key_res
                     reversed_interaction_pair = key_res + '-' + partner_res
                 else:
@@ -203,7 +233,7 @@ def analyze_frame(i):
     frame['Index'] = frame['Index'].astype(int)
     # Convert "HSD" to "HIS"
     frame.loc[frame['Residue'] == 'HSD', 'Residue'] = 'HIS'
-    # Fix chain name
+    # Make chain name the last character of segment
     frame['Chain'] = frame['Segment'].str[-1]
     frame.loc[frame['Chain'] == '3', 'Chain'] = 'W'
     # Convert atom column to 'HETATM' for analysis
@@ -214,8 +244,8 @@ def analyze_frame(i):
     if not arg.pdb:
         frame['Segment'] = frame['Type'].str[0]
     # DEBUG - Write selection in each frame to file
-    with open(os.path.join(debug_folder, 'example_selection_frame_' + str(i) + '.txt'), 'w+') as f:
-        f.write(frame.to_string())
+    # with open(os.path.join(debug_folder, 'example_selection_frame_' + str(i) + '.txt'), 'w+') as f:
+    #     f.write(frame.to_string())
     # Convert every column to string for easier processing
     frame = frame.astype(str)
     # Record interactions
@@ -333,7 +363,7 @@ def plot_interactions(interaction_map, interaction_name, result):
     #############################################################################################
     # Plot time series of interactions as a heatmap
     #############################################################################################
-    time_series_plot = sns.heatmap(interaction_map, vmin=0, vmax=1, xticklabels=False, yticklabels=1, linewidths=0.2, cbar=False,
+    time_series_plot = sns.heatmap(interaction_map, vmin=0, vmax=1, xticklabels=False, yticklabels=1, linewidths=0, cbar=False,
                                    ax=ax1, cmap=matplotlib.colors.ListedColormap(['#1C1427', '#52D681']), annot_kws={'size': 25 / np.sqrt(len(interaction_map.columns))})
     # Add black frame around heatmap
     for _, spine in time_series_plot.spines.items():
@@ -359,7 +389,7 @@ def plot_interactions(interaction_map, interaction_name, result):
     # percentage_interaction_map = percentage_interaction_map.reindex(sorted(percentage_interaction_map.index, key=lambda x: int(x.split(':')[0][1:])), axis=0)
     # Replace all NaN with zeroes
     percentage_interaction_map.fillna(0, inplace=True)
-    # Add annotations to display percentage in each cell
+    # Hide annotations for cells that display 0
     annotations = percentage_interaction_map.values.astype(str)
     annotations[annotations == '0.0'] = ''
     # Save data
@@ -370,9 +400,10 @@ def plot_interactions(interaction_map, interaction_name, result):
     # Add black frame around heatmap
     for _, spine in percentage_plot.spines.items():
         spine.set_visible(True)
-    # for text in percentage_plot.texts:
-    #     if len(text.get_text()) > 0:
-    #         text.set_text(text.get_text() + '%')
+    # Add annotations to display percentage in each cell
+    for text in percentage_plot.texts:
+        if len(text.get_text()) > 0:
+            text.set_text(text.get_text() + '%')
     # Generate color bar
     # axins = inset_axes(ax2,
     #                    width=0.3,
@@ -482,11 +513,11 @@ else:
     file_name = '.'.join(arg.dcd.split('.')[:-1])
 
 temp_pdb_folder = 'temp_pdb_' + file_name + '_' + name
-debug_folder = 'debug_' + file_name + '_' + name
+# debug_folder = 'debug_' + file_name + '_' + name
 saved_results_folder = 'saved_results_' + file_name + '_' + name
 figures_folder = 'figures_' + file_name + '_' + name
 os.makedirs(temp_pdb_folder, exist_ok=True)
-os.makedirs(debug_folder, exist_ok=True)
+# os.makedirs(debug_folder, exist_ok=True)
 os.makedirs(saved_results_folder, exist_ok=True)
 os.makedirs(figures_folder, exist_ok=True)
 os.makedirs(os.path.join(figures_folder, 'interchain'), exist_ok=True)
@@ -515,7 +546,7 @@ if not arg.skip_command:
         else:
             # Load trajectory files
             f.write('mol new ' + arg.psf + ' type psf first 0 last -1 step 1 filebonds 1 autobonds 1 waitfor all\n')
-            f.write('mol addfile ' + arg.dcd + ' type ' + arg.dcd.split('.')[-1] + ' first 0 last ' + str(arg.end_frame) + ' step ' + str(arg.step) + ' filebonds 1 autobonds 1 waitfor all\n')
+            f.write('mol addfile ' + arg.dcd + ' type ' + arg.dcd.split('.')[-1] + ' first ' + str(arg.begin_frame) + ' last ' + str(arg.end_frame) + ' step ' + str(arg.step) + ' filebonds 1 autobonds 1 waitfor all\n')
             # Center protein
             f.write('source prot_center.tcl\n\n')
 
@@ -572,14 +603,19 @@ if not arg.skip_command:
     # sp.Popen(cmd, stdin=sp.PIPE)
     sp.call(['/bin/bash', '-c', '-i', 'vmd -dispdev text -e ' + vmd_cmd_file], stdin=sp.PIPE)
 
-# Read IDs and segname of residues from sel1 that can possibly interact with sel2
+# Read IDs and segname of residues from sel1 that can possibly interact with sel2 and vice versa
 with open(os.path.join(temp_pdb_folder, name + '_sel1_resid.dat')) as f:
     interacting_sel1_resid = [list(map(int, i.split())) for i in f.read().splitlines()][0]
 with open(os.path.join(temp_pdb_folder, name + '_sel1_segment.dat')) as f:
     interacting_sel1_segname = [i.split() for i in f.read().splitlines()][0]
+with open(os.path.join(temp_pdb_folder, name + '_sel2_resid.dat')) as f:
+    interacting_sel2_resid = [list(map(int, i.split())) for i in f.read().splitlines()][0]
+with open(os.path.join(temp_pdb_folder, name + '_sel2_segment.dat')) as f:
+    interacting_sel2_segname = [i.split() for i in f.read().splitlines()][0]
 
 # Combine IDs and segname, removing any duplicates
 interacting_sel1 = list(set([str(i) + ':' + str(j[-1]) for i, j in zip(interacting_sel1_resid, interacting_sel1_segname)]))
+interacting_sel2 = list(set([str(i) + ':' + str(j[-1]) for i, j in zip(interacting_sel2_resid, interacting_sel2_segname)]))
 
 # Obtain number of frames
 with open(os.path.join(temp_pdb_folder, name + '_nframes.txt')) as f:
@@ -766,7 +802,7 @@ with open(os.path.join(saved_results_folder, 'top_contacts.csv'), 'w+') as f:
         if name not in no_interactions:
             # Load contact map
             try:
-                contact_map = pd.read_csv(saved_results_percentage[num], index_col=0)
+                contact_map = pd.read_csv(interchain_saved_results_percentage[num], index_col=0)
             except:
                 continue
             for pair in contact_map.stack().nlargest(100).index:
